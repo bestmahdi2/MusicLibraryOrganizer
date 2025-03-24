@@ -143,7 +143,7 @@ if __name__ == "__main__":
     for folder in [OUTPUT_DIR, FAILED_DIR, FAILED_DIR]:
         os.makedirs(folder, exist_ok=True)
 
-    if "-archive" in sys.argv:
+    if any(arg in sys.argv for arg in ("--archive", "-a")):
         archive_files()
 
     else:
