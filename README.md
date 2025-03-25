@@ -119,11 +119,9 @@ After installing Python and pip, you can follow the same installation steps as m
 
 For any inquiries or feedback, please contact:
 
-- Your Name - [bestmahdi2@gmail.com](mailto:bestmahdi2@gmail.com)
+- Email - [bestmahdi2@gmail.com](mailto:bestmahdi2@gmail.com)
 - GitHub: [bestmahdi2](https://github.com/bestmahdi2)
+- YouTube: [ExBytes](https://www.youtube.com/@ExplainedBytes)
 
 ---
-
 Thank you for using the Music Library Organizer! Happy processing! 🎶
-
-``` 
