@@ -1,9 +1,12 @@
+import json
 import os
 import re
 import sys
 import shutil
 import pathlib
+import urllib3
 import requests
+from time import sleep
 from mutagen.mp3 import MP3
 from mutagen import MutagenError
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TCON, TDRC, APIC
@@ -27,7 +30,7 @@ SHAZAM_HEADERS = {
 }
 
 
-def process_audio_file(file_path):
+def process_audio_file(file_path, sample_byte_size=SAMPLE_BYTE_SIZE):
     """Processes an audio file: identifies it, updates metadata, and moves it to the output folder."""
 
     file_path = pathlib.Path(file_path)
@@ -35,7 +38,7 @@ def process_audio_file(file_path):
 
     # Read a small portion of the file for song identification
     with open(file_path, "rb") as audio_file:
-        audio_sample = audio_file.read(SAMPLE_BYTE_SIZE)
+        audio_sample = audio_file.read(sample_byte_size)
 
     # Send request to Shazam API
     proxies = {"ADD_YOUR_PROXY_HERE": "type://user:pass@ip:port"} if USE_PROXY else None
@@ -43,14 +46,25 @@ def process_audio_file(file_path):
 
     if response.status_code == 451:
         print("❌ Error 451: This request is blocked. Check your API key or region!")
-        return False
+        return
 
-    response.raise_for_status()  # Check if request was successful
     track_data = response.json().get("track")  # Extract song information
 
-    if not track_data or not track_data.get("sections"):
+    try:
+        track_data = response.json().get("track")  # Extract song information
+    except (json.decoder.JSONDecodeError, requests.exceptions.JSONDecodeError):
         print("❌ The API returned no track information.")
-        return False
+        return
+
+    if not track_data or not track_data.get("sections"):
+        if sample_byte_size == SAMPLE_BYTE_SIZE:
+            print("🔄 Retrying with a larger sample size. The API returned no track information.")
+            process_audio_file(file_path, sample_byte_size=SAMPLE_BYTE_SIZE * 2)
+
+        else:
+            print("❌ The API returned no track information.")
+
+        return
 
     metadata = extract_metadata(track_data)  # Extract relevant metadata
     new_filename = f"{metadata['artist']} - {metadata['title']}{ext}"
@@ -59,9 +73,9 @@ def process_audio_file(file_path):
 
     if ext == ".mp3" and not update_audio_tags(file_path, metadata):
         move_to_failed(file_path)
-        return False
+        return
 
-    return move_file(file_path, new_file_path)
+    move_file(file_path, new_file_path)
 
 
 def move_file(file_path, new_file_path):
@@ -70,11 +84,9 @@ def move_file(file_path, new_file_path):
     try:
         shutil.move(file_path, new_file_path)
         print(f"✅ Processed: {os.path.basename(file_path)} → {os.path.basename(new_file_path)}")
-        return True
 
     except (FileNotFoundError, PermissionError, shutil.Error, OSError) as e:
         print(f"❌ Error moving file {file_path}: {e}")
-        return False
 
 
 def extract_metadata(track_data):
@@ -218,16 +230,26 @@ def main():
         total_files = len(audio_files)
         for i, audio_file in enumerate(audio_files, 1):
             file_path = os.path.join(INPUT_DIR, audio_file)
-            print(f"➖ [{i}/{total_files}] Processing: {audio_file}")
+            print(('\n' if i != 1 else '') + f"➖ [{i}/{total_files}] Processing: {audio_file}")
+
             try:
                 process_audio_file(file_path)
+
             except FileNotFoundError:
                 print(f"❌ This file does not exist: {file_path}")
+
             except PermissionError:
                 print(f"❌ You don't have the right permission for this file: {file_path}")
 
+            except (
+                    urllib3.exceptions.ProtocolError, requests.exceptions.ConnectionError):
+                print(f"❌ Internet connection issues!")
+
+            sleep(0.5)
+
     except FileNotFoundError:
         print(f"❌ The system cannot find the path specified: {INPUT_DIR}")
+
     except PermissionError:
         print(f"❌ You don't have the right permission for this path: {INPUT_DIR}")
 
